@@ -372,3 +372,128 @@ print(comparison_df.head())
 bert_errors = comparison_df[comparison_df['actual'] != comparison_df['pred_bert']]
 print('Jumlah error BERT:', len(bert_errors))
 print(bert_errors.head(10))
+# ============================================================
+# 12. DEMO PREDIKSI MODEL UNTUK VIDEO
+# ============================================================
+# Bagian ini digunakan untuk mendemonstrasikan bahwa model yang sudah dilatih
+# dapat menerima input pesan baru dan menghasilkan prediksi ham/spam.
+
+label_output = {0: 'ham', 1: 'spam'}
+
+def predict_text_all_models(text):
+    print('\n' + '=' * 80)
+    print('INPUT PESAN:')
+    print(text)
+    print('=' * 80)
+
+    # Preprocessing untuk model traditional dan FastText
+    clean = clean_text(text)
+    print('Hasil preprocessing:', clean)
+
+    # 1. BoW
+    bow_vec = bow_vectorizer.transform([clean])
+    pred_bow_demo = bow_model.predict(bow_vec)[0]
+
+    # 2. TF-IDF
+    tfidf_vec = tfidf_vectorizer.transform([clean])
+    pred_tfidf_demo = tfidf_model.predict(tfidf_vec)[0]
+
+    # 3. N-gram
+    ngram_vec = ngram_vectorizer.transform([clean])
+    pred_ngram_demo = ngram_model.predict(ngram_vec)[0]
+
+    # 4. FastText
+    tokens = clean.split()
+    fasttext_vec = get_document_vector(tokens, fasttext_model, EMBEDDING_SIZE)
+    pred_fasttext_demo = fasttext_clf.predict([fasttext_vec])[0]
+
+    # 5. BERT fine-tuned
+    bert_model.eval()
+    inputs = bert_tokenizer(
+        text,
+        return_tensors='pt',
+        truncation=True,
+        padding=True,
+        max_length=128
+    )
+
+    # Jika model berada di GPU, input juga dipindahkan ke GPU
+    model_device = next(bert_model.parameters()).device
+    inputs = {key: value.to(model_device) for key, value in inputs.items()}
+
+    with torch.no_grad():
+        outputs = bert_model(**inputs)
+
+    pred_bert_demo = outputs.logits.argmax(dim=-1).item()
+
+    print('\nHASIL PREDIKSI SEMUA MODEL:')
+    print('BoW + MultinomialNB                 :', label_output[pred_bow_demo])
+    print('TF-IDF + LinearSVC                  :', label_output[pred_tfidf_demo])
+    print('N-gram(1,2) + LogisticRegression    :', label_output[pred_ngram_demo])
+    print('FastText + LogisticRegression       :', label_output[pred_fasttext_demo])
+    print('BERT Fine-Tuned                     :', label_output[pred_bert_demo])
+
+    return {
+        'input': text,
+        'clean_text': clean,
+        'BoW': label_output[pred_bow_demo],
+        'TF-IDF': label_output[pred_tfidf_demo],
+        'N-gram': label_output[pred_ngram_demo],
+        'FastText': label_output[pred_fasttext_demo],
+        'BERT Fine-Tuned': label_output[pred_bert_demo]
+    }
+
+
+print("\n================ DEMO INTERAKTIF =================\n")
+
+while True:
+    text = input("Masukkan pesan (ketik 'exit' untuk keluar): ")
+
+    if text.lower() == 'exit':
+        print("Demo selesai.")
+        break
+
+    print("\nINPUT:", text)
+
+    # Preprocess
+    clean = clean_text(text)
+    print("Hasil preprocessing:", clean)
+
+    # BoW
+    bow_vec = bow_vectorizer.transform([clean])
+    pred_bow = bow_model.predict(bow_vec)[0]
+
+    # TF-IDF
+    tfidf_vec = tfidf_vectorizer.transform([clean])
+    pred_tfidf = tfidf_model.predict(tfidf_vec)[0]
+
+    # N-gram
+    ngram_vec = ngram_vectorizer.transform([clean])
+    pred_ngram = ngram_model.predict(ngram_vec)[0]
+
+    # FastText
+    tokens = clean.split()
+    vec = get_document_vector(tokens, fasttext_model)
+    pred_fasttext = fasttext_clf.predict([vec])[0]
+
+    # BERT
+    import torch
+    bert_model.eval()
+
+    inputs = bert_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+
+    with torch.no_grad():
+        outputs = bert_model(**inputs)
+
+    pred_bert = outputs.logits.argmax().item()
+
+    label_map = {0: 'ham', 1: 'spam'}
+
+    print("\nHASIL PREDIKSI:")
+    print("BoW:", label_map[pred_bow])
+    print("TF-IDF:", label_map[pred_tfidf])
+    print("N-gram:", label_map[pred_ngram])
+    print("FastText:", label_map[pred_fasttext])
+    print("BERT:", label_map[pred_bert])
+
+    print("\n----------------------------------------\n")
